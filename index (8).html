@@ -1,0 +1,1750 @@
+<html lang="en" class="h-full bg-gray-900 text-gray-100">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linux & Windows Terminal Emulator with AI, GUI, Nano Editor & Neofetch</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+  />
+  <style>
+    /* Custom scrollbar for terminal and editor */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1f2937;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: #4b5563;
+      border-radius: 4px;
+    }
+    /* Blinking cursor */
+    @keyframes blink {
+      0%, 50%, 100% {
+        opacity: 1;
+      }
+      25%, 75% {
+        opacity: 0;
+      }
+    }
+    .cursor {
+      animation: blink 1.2s step-start infinite;
+    }
+    /* Scrollbar for command list */
+    #command-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    /* Nano editor overlay */
+    #nano-editor-overlay {
+      position: fixed;
+      inset: 0;
+      background: #111827;
+      color: #9ae6b4;
+      font-family: monospace;
+      display: none;
+      flex-direction: column;
+      z-index: 1000;
+    }
+    #nano-editor-header {
+      background: #065f46;
+      padding: 0.5rem 1rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    #nano-editor-textarea {
+      flex-grow: 1;
+      background: #111827;
+      color: #9ae6b4;
+      border: none;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 1rem;
+      resize: none;
+      outline: none;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+    #nano-editor-footer {
+      background: #065f46;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      user-select: none;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    #nano-editor-footer span {
+      flex-grow: 1;
+      text-align: center;
+    }
+    #nano-editor-close-btn {
+      background: transparent;
+      border: none;
+      color: #9ae6b4;
+      font-size: 1.25rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    #nano-editor-close-btn:hover,
+    #nano-editor-close-btn:focus {
+      color: #d1fae5;
+      outline: none;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col">
+  <header class="flex items-center bg-gray-800 px-4 py-2 select-none">
+    <i class="fas fa-terminal text-green-400 mr-2"></i>
+    <h1 class="font-mono font-bold text-green-400 text-lg flex-grow">linux-windows-terminal</h1>
+    <button id="toggle-gui" aria-pressed="false" aria-label="Toggle command study panel" class="text-green-400 hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 rounded px-2 py-1 border border-green-400 mr-2">
+      <i class="fas fa-book"></i> Study Commands
+    </button>
+    <button id="toggle-editor" aria-pressed="false" aria-label="Toggle text editor panel" class="text-green-400 hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 rounded px-2 py-1 border border-green-400">
+      <i class="fas fa-edit"></i> Text Editor
+    </button>
+  </header>
+  <main class="flex-grow flex flex-col md:flex-row overflow-hidden">
+    <section class="flex-grow flex flex-col overflow-auto p-4 font-mono text-sm leading-relaxed" id="terminal" tabindex="0" aria-label="Linux and Windows terminal emulator" role="region" aria-live="polite" aria-atomic="false" aria-relevant="additions">
+      <!-- Terminal output will appear here -->
+    </section>
+    <aside id="gui-panel" class="hidden md:block w-full md:w-96 bg-gray-800 border-l border-gray-700 p-4 overflow-auto font-mono text-sm text-gray-300">
+      <h2 class="text-green-400 font-bold mb-3 flex items-center"><i class="fas fa-book-open mr-2"></i> Command Study Panel</h2>
+      <input type="text" id="search-commands" placeholder="Search commands..." class="w-full mb-3 px-3 py-2 rounded bg-gray-700 text-green-400 placeholder-green-600 focus:outline-none focus:ring-2 focus:ring-green-400" aria-label="Search commands" />
+      <div id="command-list" role="list" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="List of available commands">
+        <!-- Commands list populated here -->
+      </div>
+      <div id="command-details" class="mt-4 bg-gray-900 p-3 rounded border border-gray-700 text-green-300 whitespace-pre-wrap" aria-live="polite" aria-atomic="true" tabindex="0">
+        Select a command to see details.
+      </div>
+    </aside>
+    <aside id="editor-panel" class="hidden md:block w-full md:w-96 bg-gray-800 border-l border-gray-700 flex flex-col p-4 font-mono text-sm text-gray-300">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-green-400 font-bold flex items-center"><i class="fas fa-file-alt mr-2"></i> Text Editor</h2>
+        <button id="close-editor" aria-label="Close text editor panel" class="text-green-400 hover:text-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 rounded px-2 py-1 border border-green-400">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="mb-2 flex space-x-2">
+        <input type="text" id="editor-filename" placeholder="Filename (e.g. notes.txt)" class="flex-grow px-3 py-2 rounded bg-gray-700 text-green-400 placeholder-green-600 focus:outline-none focus:ring-2 focus:ring-green-400" aria-label="Filename input" />
+        <button id="editor-load" class="bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-gray-100 font-semibold focus:outline-none focus:ring-2 focus:ring-green-400" aria-label="Load file">Load</button>
+        <button id="editor-save" class="bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-gray-100 font-semibold focus:outline-none focus:ring-2 focus:ring-green-400" aria-label="Save file">Save</button>
+      </div>
+      <textarea id="editor-textarea" class="flex-grow resize-none bg-gray-900 rounded p-3 font-mono text-green-400 focus:outline-none focus:ring-2 focus:ring-green-400" aria-label="Text editor area" spellcheck="false" rows="20"></textarea>
+      <div id="editor-status" class="mt-2 text-green-400 text-xs italic min-h-[1.25rem]" aria-live="polite" aria-atomic="true"></div>
+    </aside>
+  </main>
+  <form id="input-form" class="bg-gray-800 px-4 py-2 flex items-center font-mono text-green-400">
+    <span id="prompt" class="select-none" aria-hidden="true">user@web:~$</span>
+    <input
+      id="command-input"
+      type="text"
+      autocomplete="off"
+      spellcheck="false"
+      aria-label="Terminal command input"
+      class="bg-transparent flex-grow ml-2 outline-none text-green-400 placeholder-green-600"
+      autofocus
+      autocorrect="off"
+      autocapitalize="off"
+      />
+  </form>
+
+  <!-- Nano Editor Overlay -->
+  <div id="nano-editor-overlay" role="dialog" aria-modal="true" aria-labelledby="nano-editor-title" tabindex="-1">
+    <div id="nano-editor-header">
+      <span id="nano-editor-title">GNU nano 6.4</span>
+      <button id="nano-editor-close-btn" aria-label="Exit nano editor"><i class="fas fa-times"></i></button>
+    </div>
+    <textarea id="nano-editor-textarea" spellcheck="false" aria-label="Nano text editor"></textarea>
+    <div id="nano-editor-footer" aria-live="polite" aria-atomic="true">
+      <span>^G Help</span>
+      <span>^O Write Out</span>
+      <span>^X Exit</span>
+      <span id="nano-editor-status"></span>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const terminal = document.getElementById('terminal');
+      const form = document.getElementById('input-form');
+      const input = document.getElementById('command-input');
+      const promptStrLinux = 'user@web:~$';
+      const promptStrWindows = 'C:\\Users\\user>';
+      let isWindowsMode = false;
+
+      // Simulated file system structure (Linux style)
+      const fileSystem = {
+        '/': {
+          type: 'dir',
+          content: {
+            home: {
+              type: 'dir',
+              content: {
+                user: {
+                  type: 'dir',
+                  content: {
+                    'README.txt': {
+                      type: 'file',
+                      content: 'Welcome to your web Linux & Windows terminal emulator!\nType "help" to see available commands.'
+                    },
+                    'notes.md': {
+                      type: 'file',
+                      content: '# Notes\n- This is a simulated file system.\n- Files and directories can be listed and read.'
+                    }
+                  }
+                }
+              }
+            },
+            etc: {
+              type: 'dir',
+              content: {
+                'config.cfg': {
+                  type: 'file',
+                  content: 'configuration=default\nversion=1.0.0'
+                }
+              }
+            },
+            var: {
+              type: 'dir',
+              content: {}
+            },
+            tmp: {
+              type: 'dir',
+              content: {}
+            }
+          }
+        }
+      };
+
+      // Simulated Windows file system (simple)
+      const winFileSystem = {
+        'C:\\': {
+          type: 'dir',
+          content: {
+            'Users': {
+              type: 'dir',
+              content: {
+                'user': {
+                  type: 'dir',
+                  content: {
+                    'README.txt': {
+                      type: 'file',
+                      content: 'Welcome to your web Windows terminal emulator!\nType "help" to see available commands.'
+                    },
+                    'notes.md': {
+                      type: 'file',
+                      content: '# Notes\n- This is a simulated Windows file system.\n- Files and directories can be listed and read.'
+                    }
+                  }
+                }
+              }
+            },
+            'Windows': {
+              type: 'dir',
+              content: {}
+            },
+            'Program Files': {
+              type: 'dir',
+              content: {}
+            }
+          }
+        }
+      };
+
+      // Current working directory path as array (Linux style)
+      let cwd = ['/','home','user'];
+      // Windows current directory string
+      let winCwd = 'C:\\Users\\user\\';
+
+      // Command history
+      let history = [];
+      let historyIndex = -1;
+
+      // Environment variables Linux style
+      const envLinux = {
+        USER: 'user',
+        HOME: '/home/user',
+        PWD: '/home/user',
+        SHELL: '/bin/webshell',
+        PATH: '/bin:/usr/bin:/usr/local/bin',
+        TERM: 'xterm-256color',
+        LANG: 'en_US.UTF-8',
+      };
+
+      // Environment variables Windows style
+      const envWindows = {
+        USERNAME: 'user',
+        USERPROFILE: 'C:\\Users\\user',
+        HOMEDRIVE: 'C:',
+        HOMEPATH: '\\Users\\user',
+        PATH: 'C:\\Windows\\System32;C:\\Windows;C:\\Program Files',
+        PROMPT: '$P$G',
+        COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+        OS: 'Windows_NT',
+      };
+
+      // Helper: get current directory object (Linux)
+      function getDir(pathArr) {
+        let dir = fileSystem['/'];
+        for (let i = 1; i < pathArr.length; i++) {
+          if (!dir.content[pathArr[i]] || dir.content[pathArr[i]].type !== 'dir') {
+            return null;
+          }
+          dir = dir.content[pathArr[i]];
+        }
+        return dir;
+      }
+
+      // Helper: resolve Linux path string to absolute path array
+      function resolvePath(pathStr) {
+        if (!pathStr) return cwd.slice();
+        let parts = pathStr.split('/').filter(Boolean);
+        let newPath;
+        if (pathStr.startsWith('/')) {
+          newPath = ['/'];
+        } else {
+          newPath = cwd.slice();
+        }
+        for (const part of parts) {
+          if (part === '.') continue;
+          else if (part === '..') {
+            if (newPath.length > 1) newPath.pop();
+          } else {
+            newPath.push(part);
+          }
+        }
+        return newPath;
+      }
+
+      // Helper: get file or dir object by Linux path array
+      function getEntry(pathArr) {
+        let dir = fileSystem['/'];
+        for (let i = 1; i < pathArr.length; i++) {
+          if (!dir.content[pathArr[i]]) return null;
+          dir = dir.content[pathArr[i]];
+        }
+        return dir;
+      }
+
+      // Helper: convert Linux path array to string
+      function pathToString(pathArr) {
+        if (pathArr.length === 1) return '/';
+        return pathArr.join('/').replace('//','/');
+      }
+
+      // Windows helpers
+      function winResolvePath(pathStr) {
+        if (!pathStr) return winCwd;
+        if (pathStr.match(/^[a-zA-Z]:\\/)) {
+          // Absolute path
+          return pathStr.endsWith('\\') ? pathStr : pathStr + '\\';
+        }
+        if (pathStr.startsWith('\\')) {
+          // Absolute path on current drive
+          let drive = winCwd.slice(0,2);
+          return drive + pathStr + (pathStr.endsWith('\\') ? '' : '\\');
+        }
+        // Relative path
+        if (winCwd.endsWith('\\')) {
+          return winCwd + pathStr + (pathStr.endsWith('\\') ? '' : '\\');
+        }
+        return winCwd + '\\' + pathStr + (pathStr.endsWith('\\') ? '' : '\\');
+      }
+
+      function winGetEntry(pathStr) {
+        let parts = pathStr.split('\\').filter(Boolean);
+        if (parts.length === 0) return null;
+        let drive = parts[0].toUpperCase() + ':\\';
+        let dir = winFileSystem[drive];
+        if (!dir) return null;
+        for (let i = 1; i < parts.length; i++) {
+          if (!dir.content[parts[i]]) return null;
+          dir = dir.content[parts[i]];
+        }
+        return dir;
+      }
+
+      // Helper: print output line
+      function printLine(text = '', className = '') {
+        const line = document.createElement('div');
+        if (className) line.className = className;
+        line.textContent = text;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      // Helper: print output with HTML (for colors)
+      function printHTML(html) {
+        const line = document.createElement('div');
+        line.innerHTML = html;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      // Helper: print prompt + command
+      function printCommand(cmd) {
+        const line = document.createElement('div');
+        const prompt = isWindowsMode ? promptStrWindows : promptStrLinux;
+        line.innerHTML = `<span class="text-green-400">${prompt}</span> ${escapeHTML(cmd)}`;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      // Escape HTML special chars
+      function escapeHTML(text) {
+        return text.replace(/&/g, "&amp;")
+                   .replace(/</g, "&lt;")
+                   .replace(/>/g, "&gt;")
+                   .replace(/"/g, "&quot;")
+                   .replace(/'/g, "&#039;");
+      }
+
+      // AI Commands (simple simulated)
+      const aiCommands = {
+        'ai-help': {
+          description: 'Show AI commands help.',
+          usage: 'ai-help',
+          exec() {
+            printLine('AI Commands:');
+            printLine('  ai-help - Show this help message');
+            printLine('  ai-explain [command] - Explain a Linux or Windows command');
+            printLine('  ai-translate [text] - Translate text to another language (simulated)');
+            printLine('  ai-joke - Tell a programming joke');
+          }
+        },
+        'ai-explain': {
+          description: 'Explain a Linux or Windows command.',
+          usage: 'ai-explain [command]',
+          exec(args) {
+            if (args.length === 0) {
+              printLine('ai-explain: missing command to explain');
+              return;
+            }
+            const cmd = args[0].toLowerCase();
+            const explanation = commandDetails[cmd]?.description || windowsCommandDetails[cmd]?.description || 'No explanation found for that command.';
+            printLine(`Explanation for "${cmd}":`);
+            printLine(explanation);
+          }
+        },
+        'ai-translate': {
+          description: 'Translate text to another language (simulated).',
+          usage: 'ai-translate [text]',
+          exec(args) {
+            if (args.length === 0) {
+              printLine('ai-translate: missing text to translate');
+              return;
+            }
+            const text = args.join(' ');
+            printLine(`Simulated translation of: "${text}"`);
+            printLine('Translation: [This is a simulated translation]');
+          }
+        },
+        'ai-joke': {
+          description: 'Tell a programming joke.',
+          usage: 'ai-joke',
+          exec() {
+            printLine('Why do programmers prefer dark mode?');
+            printLine('Because light attracts bugs! 🐛');
+          }
+        }
+      };
+
+      // Linux commands implementation
+      const linuxCommands = {
+        help(args) {
+          printLine('Available Linux commands:');
+          printLine(Object.keys(commands).filter(c => !windowsCommands[c] && !aiCommands[c]).sort().join(', '));
+          printLine('Type "help windows" to see Windows commands.');
+          printLine('Type "help ai" to see AI commands.');
+          printLine('Type "switch" to toggle between Linux and Windows modes.');
+          printLine('Type "edit [filename]" to open the text editor with a file.');
+          printLine('Type "nano [filename]" to open the nano text editor.');
+          printLine('Type "neofetch" to display system information.');
+        },
+        ls(args) {
+          let targetPath = cwd.slice();
+          let showAll = false;
+          let longFormat = false;
+          let paths = [];
+
+          for (const arg of args) {
+            if (arg === '-a') showAll = true;
+            else if (arg === '-l') longFormat = true;
+            else paths.push(arg);
+          }
+          if (paths.length === 0) paths.push('.');
+
+          for (const p of paths) {
+            let resolved = resolvePath(p);
+            let dir = getEntry(resolved);
+            if (!dir) {
+              printLine(`ls: cannot access '${p}': No such file or directory`);
+              continue;
+            }
+            if (dir.type === 'file') {
+              printLine(p);
+              continue;
+            }
+            // dir.type === 'dir'
+            let entries = Object.entries(dir.content);
+            if (!showAll) {
+              entries = entries.filter(([name]) => !name.startsWith('.'));
+            }
+            entries.sort((a,b) => a[0].localeCompare(b[0]));
+            if (paths.length > 1) {
+              printLine(p + ':');
+            }
+            if (longFormat) {
+              for (const [name, entry] of entries) {
+                let typeChar = entry.type === 'dir' ? 'd' : '-';
+                let size = entry.type === 'file' ? entry.content.length : 0;
+                let date = new Date().toLocaleString();
+                printLine(`${typeChar}rw-r--r-- 1 user user ${size.toString().padStart(5,' ')} ${date} ${name}`);
+              }
+            } else {
+              let line = entries.map(([name, entry]) => {
+                if (entry.type === 'dir') return `<span class="text-blue-400 font-bold">${escapeHTML(name)}</span>`;
+                else return escapeHTML(name);
+              }).join('  ');
+              printHTML(line);
+            }
+          }
+        },
+        cd(args) {
+          let target = args[0] || envLinux.HOME;
+          let resolved = resolvePath(target);
+          let dir = getEntry(resolved);
+          if (!dir) {
+            printLine(`cd: no such file or directory: ${target}`);
+            return;
+          }
+          if (dir.type !== 'dir') {
+            printLine(`cd: not a directory: ${target}`);
+            return;
+          }
+          cwd = resolved;
+          envLinux.PWD = pathToString(cwd);
+        },
+        pwd() {
+          printLine(pathToString(cwd));
+        },
+        cat(args) {
+          if (args.length === 0) {
+            printLine('cat: missing file operand');
+            return;
+          }
+          for (const filePath of args) {
+            let resolved = resolvePath(filePath);
+            let entry = getEntry(resolved);
+            if (!entry) {
+              printLine(`cat: ${filePath}: No such file or directory`);
+              continue;
+            }
+            if (entry.type === 'dir') {
+              printLine(`cat: ${filePath}: Is a directory`);
+              continue;
+            }
+            printLine(entry.content);
+          }
+        },
+        echo(args) {
+          // Support environment variable expansion
+          let output = args.map(arg => {
+            if (arg.startsWith('$')) {
+              let varName = arg.slice(1);
+              return envLinux[varName] || '';
+            }
+            return arg;
+          }).join(' ');
+          printLine(output);
+        },
+        clear() {
+          terminal.innerHTML = '';
+        },
+        date() {
+          printLine(new Date().toString());
+        },
+        whoami() {
+          printLine(envLinux.USER);
+        },
+        uname(args) {
+          if (args[0] === '-a') {
+            printLine('Linux web-terminal 5.15.0-web #1 SMP Fri Jun 23 2024 x86_64 GNU/Linux');
+          } else {
+            printLine('Linux');
+          }
+        },
+        history() {
+          history.forEach((cmd, i) => {
+            printLine(`${i + 1}  ${cmd}`);
+          });
+        },
+        man(args) {
+          if (args.length === 0) {
+            printLine('What manual page do you want? Try "man help"');
+            return;
+          }
+          const manPages = {
+            help: 'help - Display list of available commands.',
+            ls: 'ls [options] [file...] - List directory contents.\nOptions:\n  -a  Include hidden files\n  -l  Long listing format',
+            cd: 'cd [dir] - Change the current directory to DIR.',
+            pwd: 'pwd - Print the current working directory.',
+            cat: 'cat [file...] - Concatenate and display file contents.',
+            echo: 'echo [string...] - Display a line of text.',
+            clear: 'clear - Clear the terminal screen.',
+            date: 'date - Display the current date and time.',
+            whoami: 'whoami - Display the current user name.',
+            uname: 'uname [-a] - Display system information.',
+            history: 'history - Show the command history.',
+            man: 'man [command] - Show the manual for a command.',
+            mkdir: 'mkdir [dir...] - Create directories.',
+            touch: 'touch [file...] - Create empty files or update timestamps.',
+            rm: 'rm [file...] - Remove files or directories.',
+            exit: 'exit - Close the terminal (reload page).',
+            switch: 'switch - Switch between Linux and Windows modes.',
+            edit: 'edit [filename] - Open the text editor with the specified file.',
+            nano: 'nano [filename] - Open the nano text editor.',
+            neofetch: 'neofetch - Display system information with ASCII art.'
+          };
+          let cmd = args[0];
+          if (manPages[cmd]) {
+            printLine(manPages[cmd]);
+          } else {
+            printLine(`No manual entry for ${cmd}`);
+          }
+        },
+        mkdir(args) {
+          if (args.length === 0) {
+            printLine('mkdir: missing operand');
+            return;
+          }
+          for (const dirName of args) {
+            let resolved = resolvePath(dirName);
+            let parentPath = resolved.slice(0, -1);
+            let newDirName = resolved[resolved.length - 1];
+            let parentDir = getEntry(parentPath);
+            if (!parentDir) {
+              printLine(`mkdir: cannot create directory '${dirName}': No such file or directory`);
+              continue;
+            }
+            if (parentDir.type !== 'dir') {
+              printLine(`mkdir: cannot create directory '${dirName}': Not a directory`);
+              continue;
+            }
+            if (parentDir.content[newDirName]) {
+              printLine(`mkdir: cannot create directory '${dirName}': File exists`);
+              continue;
+            }
+            parentDir.content[newDirName] = { type: 'dir', content: {} };
+          }
+        },
+        touch(args) {
+          if (args.length === 0) {
+            printLine('touch: missing file operand');
+            return;
+          }
+          for (const fileName of args) {
+            let resolved = resolvePath(fileName);
+            let parentPath = resolved.slice(0, -1);
+            let newFileName = resolved[resolved.length - 1];
+            let parentDir = getEntry(parentPath);
+            if (!parentDir) {
+              printLine(`touch: cannot touch '${fileName}': No such file or directory`);
+              continue;
+            }
+            if (parentDir.type !== 'dir') {
+              printLine(`touch: cannot touch '${fileName}': Not a directory`);
+              continue;
+            }
+            if (!parentDir.content[newFileName]) {
+              parentDir.content[newFileName] = { type: 'file', content: '' };
+            }
+            // We do not track timestamps, so no update needed
+          }
+        },
+        rm(args) {
+          if (args.length === 0) {
+            printLine('rm: missing operand');
+            return;
+          }
+          for (const targetName of args) {
+            let resolved = resolvePath(targetName);
+            let parentPath = resolved.slice(0, -1);
+            let name = resolved[resolved.length - 1];
+            let parentDir = getEntry(parentPath);
+            if (!parentDir) {
+              printLine(`rm: cannot remove '${targetName}': No such file or directory`);
+              continue;
+            }
+            if (parentDir.type !== 'dir') {
+              printLine(`rm: cannot remove '${targetName}': Not a directory`);
+              continue;
+            }
+            if (!parentDir.content[name]) {
+              printLine(`rm: cannot remove '${targetName}': No such file or directory`);
+              continue;
+            }
+            // If directory, only remove if empty
+            if (parentDir.content[name].type === 'dir' && Object.keys(parentDir.content[name].content).length > 0) {
+              printLine(`rm: cannot remove '${targetName}': Directory not empty`);
+              continue;
+            }
+            delete parentDir.content[name];
+          }
+        },
+        exit() {
+          printLine('Session ended. Reloading page...');
+          setTimeout(() => location.reload(), 1000);
+        },
+        switch() {
+          isWindowsMode = !isWindowsMode;
+          if (isWindowsMode) {
+            printLine('Switched to Windows mode. Prompt changed.');
+            input.setAttribute('aria-label', 'Windows terminal command input');
+            input.value = '';
+            input.focus();
+          } else {
+            printLine('Switched to Linux mode. Prompt changed.');
+            input.setAttribute('aria-label', 'Linux terminal command input');
+            input.value = '';
+            input.focus();
+          }
+        },
+        edit(args) {
+          if (args.length === 0) {
+            printLine('edit: missing filename');
+            return;
+          }
+          const filename = args[0];
+          openEditorWithFile(filename);
+        },
+        nano(args) {
+          if (args.length === 0) {
+            printLine('nano: missing filename');
+            return;
+          }
+          const filename = args[0];
+          openNanoEditor(filename);
+        },
+        neofetch() {
+          // ASCII art Linux penguin with system info
+          const asciiArt = [
+            "       .--.",
+            "      |o_o |",
+            "      |:_/ |",
+            "     //   \\ \\",
+            "    (|     | )",
+            "   /'\\_   _/`\\",
+            "   \\___)=(___/"
+          ];
+          const sysInfo = [
+            `User: ${envLinux.USER}`,
+            `OS: Linux web-terminal`,
+            `Kernel: 5.15.0-web`,
+            `Uptime: 1 day, 2 hours, 34 minutes`,
+            `Packages: 1234 (simulated)`,
+            `Shell: ${envLinux.SHELL}`,
+            `Resolution: 1920x1080`,
+            `DE: Web Desktop`,
+            `WM: Web WM`,
+            `Terminal: Web Terminal`,
+            `CPU: Simulated 4x 2.5GHz`,
+            `Memory: 2048MiB / 4096MiB`
+          ];
+          // Print side by side
+          for (let i = 0; i < Math.max(asciiArt.length, sysInfo.length); i++) {
+            const artLine = asciiArt[i] || '';
+            const infoLine = sysInfo[i] || '';
+            printHTML(`<span class="text-green-400">${escapeHTML(artLine.padEnd(15))}</span>  ${escapeHTML(infoLine)}`);
+          }
+        }
+      };
+
+      // Windows commands implementation
+      const windowsCommands = {
+        help(args) {
+          printLine('Available Windows commands:');
+          printLine(Object.keys(commands).filter(c => windowsCommands[c]).sort().join(', '));
+          printLine('Type "help linux" to see Linux commands.');
+          printLine('Type "help ai" to see AI commands.');
+          printLine('Type "switch" to toggle between Linux and Windows modes.');
+          printLine('Type "edit [filename]" to open the text editor with a file.');
+          printLine('Type "nano [filename]" to open the nano text editor.');
+          printLine('Type "neofetch" to display system information.');
+        },
+        dir(args) {
+          let targetPath = winCwd;
+          if (args.length > 0) targetPath = winResolvePath(args[0]);
+          let dir = winGetEntry(targetPath);
+          if (!dir) {
+            printLine(`File Not Found - ${targetPath}`);
+            return;
+          }
+          if (dir.type === 'file') {
+            printLine(targetPath);
+            return;
+          }
+          // dir.type === 'dir'
+          let entries = Object.entries(dir.content);
+          entries.sort((a,b) => a[0].localeCompare(b[0]));
+          printLine(` Directory of ${targetPath}`);
+          printLine('');
+          entries.forEach(([name, entry]) => {
+            let typeStr = entry.type === 'dir' ? '<DIR>' : '';
+            let sizeStr = entry.type === 'file' ? entry.content.length.toString() : '';
+            let dateStr = new Date().toLocaleDateString();
+            printLine(`${dateStr}    ${typeStr.padEnd(5)}    ${sizeStr.padStart(10)} ${name}`);
+          });
+          printLine('');
+        },
+        cd(args) {
+          if (args.length === 0) {
+            winCwd = envWindows.USERPROFILE;
+            return;
+          }
+          let target = args[0];
+          if (target === '..') {
+            let parts = winCwd.split('\\').filter(Boolean);
+            if (parts.length > 1) parts.pop();
+            winCwd = parts.length === 0 ? 'C:\\' : parts.join('\\') + '\\';
+            return;
+          }
+          let resolved = winResolvePath(target);
+          let dir = winGetEntry(resolved);
+          if (!dir) {
+            printLine(`The system cannot find the path specified: ${target}`);
+            return;
+          }
+          if (dir.type !== 'dir') {
+            printLine(`The system cannot find the path specified: ${target}`);
+            return;
+          }
+          winCwd = resolved.endsWith('\\') ? resolved : resolved + '\\';
+        },
+        cls() {
+          terminal.innerHTML = '';
+        },
+        echo(args) {
+          printLine(args.join(' '));
+        },
+        date() {
+          printLine(new Date().toLocaleDateString());
+        },
+        time() {
+          printLine(new Date().toLocaleTimeString());
+        },
+        whoami() {
+          printLine(envWindows.USERNAME);
+        },
+        exit() {
+          printLine('Session ended. Reloading page...');
+          setTimeout(() => location.reload(), 1000);
+        },
+        mkdir(args) {
+          if (args.length === 0) {
+            printLine('The syntax of the command is incorrect.');
+            return;
+          }
+          for (const dirName of args) {
+            let resolved = winResolvePath(dirName);
+            let parts = resolved.split('\\').filter(Boolean);
+            let drive = parts[0].toUpperCase() + ':\\';
+            let parentDir = winFileSystem[drive];
+            if (!parentDir) {
+              printLine(`Cannot create directory ${dirName} - Drive not found.`);
+              continue;
+            }
+            for (let i = 1; i < parts.length - 1; i++) {
+              if (!parentDir.content[parts[i]] || parentDir.content[parts[i]].type !== 'dir') {
+                printLine(`Cannot create directory ${dirName} - Path not found.`);
+                parentDir = null;
+                break;
+              }
+              parentDir = parentDir.content[parts[i]];
+            }
+            if (!parentDir) continue;
+            let newDirName = parts[parts.length - 1];
+            if (parentDir.content[newDirName]) {
+              printLine(`A subdirectory or file ${newDirName} already exists.`);
+              continue;
+            }
+            parentDir.content[newDirName] = { type: 'dir', content: {} };
+          }
+        },
+        del(args) {
+          if (args.length === 0) {
+            printLine('The syntax of the command is incorrect.');
+            return;
+          }
+          for (const targetName of args) {
+            let resolved = winResolvePath(targetName);
+            let parts = resolved.split('\\').filter(Boolean);
+            let drive = parts[0].toUpperCase() + ':\\';
+            let parentDir = winFileSystem[drive];
+            if (!parentDir) {
+              printLine(`Could Not Find ${targetName}`);
+              continue;
+            }
+            for (let i = 1; i < parts.length - 1; i++) {
+              if (!parentDir.content[parts[i]] || parentDir.content[parts[i]].type !== 'dir') {
+                printLine(`Could Not Find ${targetName}`);
+                parentDir = null;
+                break;
+              }
+              parentDir = parentDir.content[parts[i]];
+            }
+            if (!parentDir) continue;
+            let name = parts[parts.length - 1];
+            if (!parentDir.content[name]) {
+              printLine(`Could Not Find ${targetName}`);
+              continue;
+            }
+            if (parentDir.content[name].type === 'dir' && Object.keys(parentDir.content[name].content).length > 0) {
+              printLine(`The directory is not empty: ${targetName}`);
+              continue;
+            }
+            delete parentDir.content[name];
+          }
+        },
+        type(args) {
+          if (args.length === 0) {
+            printLine('The syntax of the command is incorrect.');
+            return;
+          }
+          for (const fileName of args) {
+            let resolved = winResolvePath(fileName);
+            let entry = winGetEntry(resolved);
+            if (!entry) {
+              printLine(`File Not Found - ${fileName}`);
+              continue;
+            }
+            if (entry.type === 'dir') {
+              printLine(`File Not Found - ${fileName}`);
+              continue;
+            }
+            printLine(entry.content);
+          }
+        },
+        help(args) {
+          printLine('Windows commands:');
+          printLine(Object.keys(windowsCommands).sort().join(', '));
+          printLine('Type "help linux" to see Linux commands.');
+          printLine('Type "help ai" to see AI commands.');
+          printLine('Type "switch" to toggle between Linux and Windows modes.');
+          printLine('Type "edit [filename]" to open the text editor with a file.');
+          printLine('Type "nano [filename]" to open the nano text editor.');
+          printLine('Type "neofetch" to display system information.');
+        },
+        switch() {
+          isWindowsMode = !isWindowsMode;
+          if (isWindowsMode) {
+            printLine('Switched to Windows mode. Prompt changed.');
+            input.setAttribute('aria-label', 'Windows terminal command input');
+            input.value = '';
+            input.focus();
+          } else {
+            printLine('Switched to Linux mode. Prompt changed.');
+            input.setAttribute('aria-label', 'Linux terminal command input');
+            input.value = '';
+            input.focus();
+          }
+        },
+        edit(args) {
+          if (args.length === 0) {
+            printLine('edit: missing filename');
+            return;
+          }
+          const filename = args[0];
+          openEditorWithFile(filename);
+        },
+        nano(args) {
+          if (args.length === 0) {
+            printLine('nano: missing filename');
+            return;
+          }
+          const filename = args[0];
+          openNanoEditor(filename);
+        },
+        neofetch() {
+          // ASCII art Windows logo with system info
+          const asciiArt = [
+            "       .--.",
+            "      |o_o |",
+            "      |:_/ |",
+            "     //   \\ \\",
+            "    (|     | )",
+            "   /'\\_   _/`\\",
+            "   \\___)=(___/"
+          ];
+          const sysInfo = [
+            `User: ${envWindows.USERNAME}`,
+            `OS: Windows 10 Pro (simulated)`,
+            `Kernel: 10.0.19044`,
+            `Uptime: 3 days, 4 hours, 12 minutes`,
+            `Packages: 567 (simulated)`,
+            `Shell: cmd.exe`,
+            `Resolution: 1920x1080`,
+            `DE: Windows Desktop`,
+            `WM: Explorer`,
+            `Terminal: Windows Terminal`,
+            `CPU: Simulated 4x 3.0GHz`,
+            `Memory: 4096MiB / 8192MiB`
+          ];
+          // Print side by side
+          for (let i = 0; i < Math.max(asciiArt.length, sysInfo.length); i++) {
+            const artLine = asciiArt[i] || '';
+            const infoLine = sysInfo[i] || '';
+            printHTML(`<span class="text-blue-400">${escapeHTML(artLine.padEnd(15))}</span>  ${escapeHTML(infoLine)}`);
+          }
+        }
+      };
+
+      // Combined commands object for lookup
+      const commands = {...linuxCommands, ...windowsCommands, ...aiCommands};
+
+      // Command details for study panel (Linux + Windows + AI)
+      const commandDetails = {
+        help: {
+          description: 'Display list of available commands.',
+          usage: 'help'
+        },
+        ls: {
+          description: 'List directory contents.',
+          usage: 'ls [options] [file...]'
+        },
+        cd: {
+          description: 'Change the current directory.',
+          usage: 'cd [dir]'
+        },
+        pwd: {
+          description: 'Print the current working directory.',
+          usage: 'pwd'
+        },
+        cat: {
+          description: 'Concatenate and display file contents.',
+          usage: 'cat [file...]'
+        },
+        echo: {
+          description: 'Display a line of text.',
+          usage: 'echo [string...]'
+        },
+        clear: {
+          description: 'Clear the terminal screen.',
+          usage: 'clear'
+        },
+        date: {
+          description: 'Display the current date and time.',
+          usage: 'date'
+        },
+        whoami: {
+          description: 'Display the current user name.',
+          usage: 'whoami'
+        },
+        uname: {
+          description: 'Display system information.',
+          usage: 'uname [-a]'
+        },
+        history: {
+          description: 'Show the command history.',
+          usage: 'history'
+        },
+        man: {
+          description: 'Show the manual for a command.',
+          usage: 'man [command]'
+        },
+        mkdir: {
+          description: 'Create directories.',
+          usage: 'mkdir [dir...]'
+        },
+        touch: {
+          description: 'Create empty files or update timestamps.',
+          usage: 'touch [file...]'
+        },
+        rm: {
+          description: 'Remove files or directories.',
+          usage: 'rm [file...]'
+        },
+        exit: {
+          description: 'Close the terminal (reload page).',
+          usage: 'exit'
+        },
+        switch: {
+          description: 'Switch between Linux and Windows modes.',
+          usage: 'switch'
+        },
+        edit: {
+          description: 'Open the text editor with the specified file.',
+          usage: 'edit [filename]'
+        },
+        nano: {
+          description: 'Open the nano text editor.',
+          usage: 'nano [filename]'
+        },
+        neofetch: {
+          description: 'Display system information with ASCII art.',
+          usage: 'neofetch'
+        }
+      };
+
+      const windowsCommandDetails = {
+        dir: {
+          description: 'Display a list of files and subdirectories in a directory.',
+          usage: 'dir [path]'
+        },
+        cls: {
+          description: 'Clear the screen.',
+          usage: 'cls'
+        },
+        time: {
+          description: 'Display or set the system time.',
+          usage: 'time'
+        },
+        del: {
+          description: 'Delete one or more files.',
+          usage: 'del [file...]'
+        },
+        type: {
+          description: 'Display the contents of a text file.',
+          usage: 'type [file...]'
+        }
+      };
+
+      // Combine all commands for study panel
+      const allCommandsForStudy = {
+        ...commandDetails,
+        ...windowsCommandDetails,
+        ...Object.fromEntries(Object.entries(aiCommands).map(([k,v]) => [k, {description: v.description, usage: v.usage || k}]))
+      };
+
+      // GUI Panel Elements
+      const guiPanel = document.getElementById('gui-panel');
+      const toggleGuiBtn = document.getElementById('toggle-gui');
+      const commandList = document.getElementById('command-list');
+      const commandDetailsDiv = document.getElementById('command-details');
+      const searchInput = document.getElementById('search-commands');
+
+      // Editor Panel Elements
+      const editorPanel = document.getElementById('editor-panel');
+      const toggleEditorBtn = document.getElementById('toggle-editor');
+      const closeEditorBtn = document.getElementById('close-editor');
+      const editorTextarea = document.getElementById('editor-textarea');
+      const editorFilenameInput = document.getElementById('editor-filename');
+      const editorLoadBtn = document.getElementById('editor-load');
+      const editorSaveBtn = document.getElementById('editor-save');
+      const editorStatus = document.getElementById('editor-status');
+
+      // Nano Editor Elements
+      const nanoOverlay = document.getElementById('nano-editor-overlay');
+      const nanoTextarea = document.getElementById('nano-editor-textarea');
+      const nanoCloseBtn = document.getElementById('nano-editor-close-btn');
+      const nanoStatus = document.getElementById('nano-editor-status');
+
+      // Toggle GUI panel visibility
+      toggleGuiBtn.addEventListener('click', () => {
+        if (guiPanel.classList.contains('hidden')) {
+          guiPanel.classList.remove('hidden');
+          toggleGuiBtn.setAttribute('aria-pressed', 'true');
+          toggleGuiBtn.classList.add('bg-green-700');
+          searchInput.focus();
+        } else {
+          guiPanel.classList.add('hidden');
+          toggleGuiBtn.setAttribute('aria-pressed', 'false');
+          toggleGuiBtn.classList.remove('bg-green-700');
+          input.focus();
+        }
+      });
+
+      // Toggle Editor panel visibility
+      toggleEditorBtn.addEventListener('click', () => {
+        if (editorPanel.classList.contains('hidden')) {
+          editorPanel.classList.remove('hidden');
+          toggleEditorBtn.setAttribute('aria-pressed', 'true');
+          toggleEditorBtn.classList.add('bg-green-700');
+          editorFilenameInput.focus();
+        } else {
+          editorPanel.classList.add('hidden');
+          toggleEditorBtn.setAttribute('aria-pressed', 'false');
+          toggleEditorBtn.classList.remove('bg-green-700');
+          input.focus();
+        }
+      });
+
+      closeEditorBtn.addEventListener('click', () => {
+        editorPanel.classList.add('hidden');
+        toggleEditorBtn.setAttribute('aria-pressed', 'false');
+        toggleEditorBtn.classList.remove('bg-green-700');
+        input.focus();
+      });
+
+      // Populate command list in GUI panel
+      function populateCommandList(filter = '') {
+        commandList.innerHTML = '';
+        const filterLower = filter.toLowerCase();
+        const filteredCommands = Object.entries(allCommandsForStudy)
+          .filter(([cmd,]) => cmd.includes(filterLower) || (allCommandsForStudy[cmd].description && allCommandsForStudy[cmd].description.toLowerCase().includes(filterLower)))
+          .sort((a,b) => a[0].localeCompare(b[0]));
+
+        if (filteredCommands.length === 0) {
+          const noResult = document.createElement('div');
+          noResult.textContent = 'No commands found.';
+          noResult.className = 'p-2 text-gray-500';
+          commandList.appendChild(noResult);
+          commandDetailsDiv.textContent = 'Select a command to see details.';
+          return;
+        }
+
+        filteredCommands.forEach(([cmd, info]) => {
+          const cmdDiv = document.createElement('div');
+          cmdDiv.setAttribute('role', 'listitem');
+          cmdDiv.tabIndex = 0;
+          cmdDiv.className = 'cursor-pointer px-2 py-1 rounded hover:bg-green-700 focus:bg-green-700 focus:outline-none';
+          cmdDiv.textContent = cmd;
+          cmdDiv.addEventListener('click', () => showCommandDetails(cmd));
+          cmdDiv.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              showCommandDetails(cmd);
+            }
+          });
+          commandList.appendChild(cmdDiv);
+        });
+        commandDetailsDiv.textContent = 'Select a command to see details.';
+      }
+
+      // Show command details in GUI panel
+      function showCommandDetails(cmd) {
+        const info = allCommandsForStudy[cmd];
+        if (!info) {
+          commandDetailsDiv.textContent = 'No details available.';
+          return;
+        }
+        commandDetailsDiv.innerHTML = `<strong class="text-green-400">${cmd}</strong>\n\nUsage:\n${info.usage || 'N/A'}\n\nDescription:\n${info.description || 'N/A'}`;
+        commandDetailsDiv.focus();
+      }
+
+      // Search input event
+      searchInput.addEventListener('input', e => {
+        populateCommandList(e.target.value);
+      });
+
+      // Populate initially
+      populateCommandList();
+
+      // Text Editor Functions
+
+      // Open editor with file content (Linux or Windows)
+      function openEditorWithFile(filename) {
+        editorFilenameInput.value = filename;
+        let content = '';
+        if (isWindowsMode) {
+          // Windows file system lookup
+          let resolved = winResolvePath(filename);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            editorStatus.textContent = 'Invalid filename.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            editorStatus.textContent = 'Drive not found.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              editorStatus.textContent = 'Path not found.';
+              editorTextarea.value = '';
+              editorPanel.classList.remove('hidden');
+              editorFilenameInput.focus();
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          if (!dir.content[fileName]) {
+            editorStatus.textContent = 'File not found. Creating new file.';
+            content = '';
+          } else if (dir.content[fileName].type === 'dir') {
+            editorStatus.textContent = 'Cannot edit a directory.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          } else {
+            content = dir.content[fileName].content;
+            editorStatus.textContent = 'File loaded.';
+          }
+        } else {
+          // Linux file system lookup
+          let resolved = resolvePath(filename);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            editorStatus.textContent = 'Path not found.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          if (!parentDir.content[fileName]) {
+            editorStatus.textContent = 'File not found. Creating new file.';
+            content = '';
+          } else if (parentDir.content[fileName].type === 'dir') {
+            editorStatus.textContent = 'Cannot edit a directory.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          } else {
+            content = parentDir.content[fileName].content;
+            editorStatus.textContent = 'File loaded.';
+          }
+        }
+        editorTextarea.value = content;
+        editorPanel.classList.remove('hidden');
+        toggleEditorBtn.setAttribute('aria-pressed', 'true');
+        toggleEditorBtn.classList.add('bg-green-700');
+        editorFilenameInput.focus();
+      }
+
+      // Save editor content to file (Linux or Windows)
+      function saveEditorFile() {
+        const filename = editorFilenameInput.value.trim();
+        if (!filename) {
+          editorStatus.textContent = 'Filename cannot be empty.';
+          return;
+        }
+        const content = editorTextarea.value;
+        if (isWindowsMode) {
+          let resolved = winResolvePath(filename);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            editorStatus.textContent = 'Invalid filename.';
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            editorStatus.textContent = 'Drive not found.';
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              editorStatus.textContent = 'Path not found.';
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          dir.content[fileName] = { type: 'file', content };
+          editorStatus.textContent = `File "${filename}" saved.`;
+        } else {
+          let resolved = resolvePath(filename);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            editorStatus.textContent = 'Path not found.';
+            return;
+          }
+          parentDir.content[fileName] = { type: 'file', content };
+          editorStatus.textContent = `File "${filename}" saved.`;
+        }
+      }
+
+      // Nano Editor Functions
+
+      let nanoCurrentFile = null;
+      let nanoIsDirty = false;
+
+      function openNanoEditor(filename) {
+        nanoCurrentFile = filename;
+        nanoIsDirty = false;
+        nanoStatus.textContent = '';
+        // Load file content
+        let content = '';
+        if (isWindowsMode) {
+          let resolved = winResolvePath(filename);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            printLine('nano: invalid filename');
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            printLine('nano: drive not found');
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              printLine('nano: path not found');
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          if (!dir.content[fileName]) {
+            content = '';
+          } else if (dir.content[fileName].type === 'dir') {
+            printLine('nano: cannot edit a directory');
+            return;
+          } else {
+            content = dir.content[fileName].content;
+          }
+        } else {
+          let resolved = resolvePath(filename);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            printLine('nano: path not found');
+            return;
+          }
+          if (!parentDir.content[fileName]) {
+            content = '';
+          } else if (parentDir.content[fileName].type === 'dir') {
+            printLine('nano: cannot edit a directory');
+            return;
+          } else {
+            content = parentDir.content[fileName].content;
+          }
+        }
+        nanoTextarea.value = content;
+        nanoOverlay.style.display = 'flex';
+        nanoTextarea.focus();
+        updateNanoStatus();
+      }
+
+      function saveNanoFile() {
+        if (!nanoCurrentFile) return;
+        const content = nanoTextarea.value;
+        if (isWindowsMode) {
+          let resolved = winResolvePath(nanoCurrentFile);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            nanoStatus.textContent = 'Invalid filename.';
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            nanoStatus.textContent = 'Drive not found.';
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              nanoStatus.textContent = 'Path not found.';
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          dir.content[fileName] = { type: 'file', content };
+          nanoStatus.textContent = `File "${nanoCurrentFile}" saved.`;
+          nanoIsDirty = false;
+          updateNanoStatus();
+        } else {
+          let resolved = resolvePath(nanoCurrentFile);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            nanoStatus.textContent = 'Path not found.';
+            return;
+          }
+          parentDir.content[fileName] = { type: 'file', content };
+          nanoStatus.textContent = `File "${nanoCurrentFile}" saved.`;
+          nanoIsDirty = false;
+          updateNanoStatus();
+        }
+      }
+
+      function closeNanoEditor() {
+        if (nanoIsDirty) {
+          if (!confirm('You have unsaved changes. Exit without saving?')) {
+            nanoTextarea.focus();
+            return;
+          }
+        }
+        nanoOverlay.style.display = 'none';
+        nanoCurrentFile = null;
+        nanoIsDirty = false;
+        nanoStatus.textContent = '';
+        input.focus();
+      }
+
+      function updateNanoStatus() {
+        nanoStatus.textContent = nanoIsDirty ? 'Modified' : 'Saved';
+      }
+
+      nanoTextarea.addEventListener('input', () => {
+        nanoIsDirty = true;
+        updateNanoStatus();
+      });
+
+      nanoCloseBtn.addEventListener('click', () => {
+        closeNanoEditor();
+      });
+
+      // Keyboard shortcuts for nano editor
+      nanoTextarea.addEventListener('keydown', e => {
+        if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+          switch (e.key.toLowerCase()) {
+            case 'x': // Ctrl+X exit
+              e.preventDefault();
+              closeNanoEditor();
+              break;
+            case 'o': // Ctrl+O save
+              e.preventDefault();
+              saveNanoFile();
+              break;
+            case 'g': // Ctrl+G help
+              e.preventDefault();
+              alert('GNU nano 6.4 - This is a simulated nano editor.\n\nCtrl+O: Save\nCtrl+X: Exit\nCtrl+G: Help');
+              break;
+          }
+        }
+      });
+
+      // Text Editor Functions
+
+      // Open editor with file content (Linux or Windows)
+      function openEditorWithFile(filename) {
+        editorFilenameInput.value = filename;
+        let content = '';
+        if (isWindowsMode) {
+          // Windows file system lookup
+          let resolved = winResolvePath(filename);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            editorStatus.textContent = 'Invalid filename.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            editorStatus.textContent = 'Drive not found.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              editorStatus.textContent = 'Path not found.';
+              editorTextarea.value = '';
+              editorPanel.classList.remove('hidden');
+              editorFilenameInput.focus();
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          if (!dir.content[fileName]) {
+            editorStatus.textContent = 'File not found. Creating new file.';
+            content = '';
+          } else if (dir.content[fileName].type === 'dir') {
+            editorStatus.textContent = 'Cannot edit a directory.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          } else {
+            content = dir.content[fileName].content;
+            editorStatus.textContent = 'File loaded.';
+          }
+        } else {
+          // Linux file system lookup
+          let resolved = resolvePath(filename);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            editorStatus.textContent = 'Path not found.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          }
+          if (!parentDir.content[fileName]) {
+            editorStatus.textContent = 'File not found. Creating new file.';
+            content = '';
+          } else if (parentDir.content[fileName].type === 'dir') {
+            editorStatus.textContent = 'Cannot edit a directory.';
+            editorTextarea.value = '';
+            editorPanel.classList.remove('hidden');
+            editorFilenameInput.focus();
+            return;
+          } else {
+            content = parentDir.content[fileName].content;
+            editorStatus.textContent = 'File loaded.';
+          }
+        }
+        editorTextarea.value = content;
+        editorPanel.classList.remove('hidden');
+        toggleEditorBtn.setAttribute('aria-pressed', 'true');
+        toggleEditorBtn.classList.add('bg-green-700');
+        editorFilenameInput.focus();
+      }
+
+      // Save editor content to file (Linux or Windows)
+      function saveEditorFile() {
+        const filename = editorFilenameInput.value.trim();
+        if (!filename) {
+          editorStatus.textContent = 'Filename cannot be empty.';
+          return;
+        }
+        const content = editorTextarea.value;
+        if (isWindowsMode) {
+          let resolved = winResolvePath(filename);
+          let parts = resolved.split('\\').filter(Boolean);
+          if (parts.length === 0) {
+            editorStatus.textContent = 'Invalid filename.';
+            return;
+          }
+          let drive = parts[0].toUpperCase() + ':\\';
+          let dir = winFileSystem[drive];
+          if (!dir) {
+            editorStatus.textContent = 'Drive not found.';
+            return;
+          }
+          for (let i = 1; i < parts.length - 1; i++) {
+            if (!dir.content[parts[i]] || dir.content[parts[i]].type !== 'dir') {
+              editorStatus.textContent = 'Path not found.';
+              return;
+            }
+            dir = dir.content[parts[i]];
+          }
+          let fileName = parts[parts.length - 1];
+          dir.content[fileName] = { type: 'file', content };
+          editorStatus.textContent = `File "${filename}" saved.`;
+        } else {
+          let resolved = resolvePath(filename);
+          let parentPath = resolved.slice(0, -1);
+          let fileName = resolved[resolved.length - 1];
+          let parentDir = getEntry(parentPath);
+          if (!parentDir) {
+            editorStatus.textContent = 'Path not found.';
+            return;
+          }
+          parentDir.content[fileName] = { type: 'file', content };
+          editorStatus.textContent = `File "${filename}" saved.`;
+        }
+      }
+
+      // Text Editor Buttons
+      editorLoadBtn.addEventListener('click', e => {
+        e.preventDefault();
+        const filename = editorFilenameInput.value.trim();
+        if (!filename) {
+          editorStatus.textContent = 'Please enter a filename to load.';
+          return;
+        }
+        openEditorWithFile(filename);
+      });
+
+      editorSaveBtn.addEventListener('click', e => {
+        e.preventDefault();
+        saveEditorFile();
+      });
+
+      // Handle command input
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        const rawCmd = input.value.trim();
+        if (!rawCmd) return;
+        printCommand(rawCmd);
+        history.push(rawCmd);
+        historyIndex = history.length;
+        input.value = '';
+
+        // Parse command and args (simple split by spaces, no quotes support)
+        const parts = rawCmd.split(/\s+/);
+        const cmd = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        // Special help commands to show Linux or Windows commands
+        if (cmd === 'help' && args.length === 1) {
+          if (args[0].toLowerCase() === 'windows') {
+            printLine('Windows commands:');
+            printLine(Object.keys(windowsCommands).sort().join(', '));
+            return;
+          }
+          if (args[0].toLowerCase() === 'linux') {
+            printLine('Linux commands:');
+            printLine(Object.keys(linuxCommands).filter(c => !windowsCommands[c] && !aiCommands[c]).sort().join(', '));
+            return;
+          }
+          if (args[0].toLowerCase() === 'ai') {
+            printLine('AI commands:');
+            printLine(Object.keys(aiCommands).sort().join(', '));
+            return;
+          }
+        }
+
+        if (commands[cmd]) {
+          try {
+            commands[cmd].exec ? commands[cmd].exec(args) : commands[cmd](args);
+          } catch (err) {
+            printLine(`Error executing command: ${err.message}`);
+          }
+        } else {
+          printLine(`${cmd}: command not found`);
+        }
+      });
+
+      // Handle arrow keys for history navigation
+      input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowUp') {
+          if (history.length === 0) return;
+          if (historyIndex > 0) historyIndex--;
+          input.value = history[historyIndex] || '';
+          e.preventDefault();
+        } else if (e.key === 'ArrowDown') {
+          if (history.length === 0) return;
+          if (historyIndex < history.length - 1) historyIndex++;
+          else {
+            historyIndex = history.length;
+            input.value = '';
+            return;
+          }
+          input.value = history[historyIndex] || '';
+          e.preventDefault();
+        }
+      });
+
+      // Initial welcome message
+      printLine('Welcome to the web Linux & Windows terminal emulator!');
+      printLine('Type "help" to see available commands.');
+      printLine('Type "switch" to toggle between Linux and Windows modes.');
+      printLine('Type "edit [filename]" to open the text editor with a file.');
+      printLine('Type "nano [filename]" to open the nano text editor.');
+      printLine('Type "neofetch" to display system information.');
+      printLine('');
+
+      // Focus input on terminal click
+      terminal.addEventListener('click', () => input.focus());
+    })();
+  </script>
+</body>
+</html>
